@@ -1,67 +1,79 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import type { RouteRecordRaw } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import NProgress from 'nprogress'
+import 'nprogress/nprogress.css'
 
-const routes: Array<RouteRecordRaw> = [
-  // 新增：登录页路由
+// 导入 Layout (确保路径正确)
+import Layout from '@/layout/index.vue'
+
+const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('../views/login/index.vue'),
+    component: () => import('@/views/login/index.vue'),
     meta: { title: '登录' }
   },
-  
-  // 主应用路由
   {
     path: '/',
-    component: () => import('../layout/index.vue'),
-    redirect: '/number/pending',
+    component: Layout,
+    redirect: '/number/process', // 登录后默认跳到这里
     children: [
-      // === 一级菜单：号码办理 ===
+      {
+        path: 'dashboard',
+        name: 'Dashboard',
+        // 如果你没有 dashboard 页面，先用 Process 占位
+        component: () => import('@/views/number/Process.vue'), 
+        meta: { title: '首页', icon: 'Odometer' }
+      },
+      // --- 号码管理模块 ---
+      {
+        path: '/number/process',
+        name: 'NumberProcess',
+        component: () => import('@/views/number/Process.vue'),
+        meta: { title: '号码池管理', icon: 'List' }
+      },
       {
         path: '/number/pending',
-        name: 'Pending',
-        component: () => import('../views/number/Pending.vue'),
-        meta: { title: '待沟通', roles: ['admin', 'district'] }
+        name: 'NumberPending',
+        component: () => import('@/views/number/Pending.vue'),
+        meta: { title: '待沟通订单', icon: 'Timer' }
       },
       {
         path: '/number/completed',
-        name: 'Completed',
-        component: () => import('../views/number/Completed.vue'),
-        meta: { title: '已沟通', roles: ['admin', 'district'] }
+        name: 'NumberCompleted',
+        component: () => import('@/views/number/Completed.vue'),
+        meta: { title: '已完成订单', icon: 'Check' }
       },
       {
-        path: '/number/process',
-        name: 'Process',
-        component: () => import('../views/number/Process.vue'),
-        meta: { title: '数据处理', roles: ['admin', 'importer'] }
+        path: '/number/all',
+        name: 'NumberAll',
+        component: () => import('@/views/number/AllOrders.vue'),
+        meta: { title: '全部订单(纠错)', icon: 'Files' }
       },
       {
         path: '/number/analysis',
-        name: 'Analysis',
-        component: () => import('../views/number/Analysis.vue'),
-        meta: { title: '数据分析', roles: ['admin', 'importer'] }
+        name: 'NumberAnalysis',
+        component: () => import('@/views/number/Analysis.vue'),
+        meta: { title: '数据分析', icon: 'TrendCharts' }
       },
-
-      // === 一级菜单：基础信息管理 ===
-      {
-        path: '/system/logs',
-        name: 'Logs',
-        component: () => import('../views/system/Logs.vue'),
-        meta: { title: '用户日志', roles: ['admin'] }
-      },
-      {
-        path: '/system/permissions',
-        name: 'Permissions',
-        component: () => import('../views/system/Permissions.vue'),
-        meta: { title: '用户与权限管理', roles: ['admin'] }
-      },
+      // --- 系统管理模块 ---
       {
         path: '/system/users',
-        name: 'Users',
-        component: () => import('../views/system/Users.vue'),
-        meta: { title: '用户信息管理', roles: ['admin'] }
+        name: 'SystemUsers',
+        component: () => import('@/views/system/Users.vue'),
+        meta: { title: '用户管理', icon: 'User' }
+      },
+      {
+        path: '/system/logs',
+        name: 'SystemLogs',
+        component: () => import('@/views/system/Logs.vue'),
+        meta: { title: '操作日志', icon: 'Document' }
       }
     ]
+  },
+  // 404 路由
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/number/process'
   }
 ]
 
@@ -70,21 +82,34 @@ const router = createRouter({
   routes
 })
 
-// 简单的路由守卫（防止没登录直接进后台）
+// --- 路由守卫 (关键！) ---
 router.beforeEach((to, from, next) => {
-  // 从 localStorage 获取登录状态
-  const isLogin = localStorage.getItem('userRole')
+  NProgress.start()
   
+  const token = localStorage.getItem('token')
+  
+  // 1. 如果去的是登录页
   if (to.path === '/login') {
-    next()
-  } else {
-    // 如果没有登录，强制跳回登录页
-    if (!isLogin) {
+    // 如果已有 token，直接踢回首页
+    if (token) {
+      next('/')
+    } else {
+      next()
+    }
+  } 
+  // 2. 如果去的是非登录页
+  else {
+    // 如果没有 token，踢回登录页
+    if (!token) {
       next('/login')
     } else {
       next()
     }
   }
+})
+
+router.afterEach(() => {
+  NProgress.done()
 })
 
 export default router

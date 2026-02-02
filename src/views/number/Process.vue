@@ -13,25 +13,19 @@
             :on-change="handleFileChange"
             accept=".xlsx, .xls"
           >
-            <el-button type="success" icon="Upload">Excel 批量导入</el-button>
+            <el-button type="success" icon="Upload" :loading="uploadLoading">Excel 批量导入</el-button>
           </el-upload>
           
           <el-button type="info" link icon="Download" @click="downloadTemplate">下载模板</el-button>
         </div>
 
         <div class="right-panel">
-          <el-input 
-            v-model="searchQuery" 
-            placeholder="搜索号码..." 
-            style="width: 200px" 
-            clearable 
-            @clear="handleSearch"
-            @keyup.enter="handleSearch"
-          >
-            <template #append>
-              <el-button icon="Search" @click="handleSearch" />
-            </template>
-          </el-input>
+          <el-select v-model="searchCategory" placeholder="筛选类别" clearable style="width: 120px; margin-right: 10px" @change="handleSearch">
+             <el-option label="AAA号码" value="AAA号码" />
+             <el-option label="8号码" value="8号码" />
+             <el-option label="情人节号码" value="情人节号码" />
+          </el-select>
+          <el-button icon="Refresh" circle @click="fetchData" />
         </div>
       </div>
     </el-card>
@@ -40,29 +34,39 @@
       <el-table :data="tableData" border style="width: 100%" v-loading="loading">
         <el-table-column type="index" label="#" width="60" align="center" />
         
-        <el-table-column prop="number" label="号码资源" align="center">
+        <el-table-column prop="phone_number" label="号码资源" align="center">
           <template #default="scope">
-            <span class="number-font">{{ scope.row.number }}</span>
+            <span class="number-font">{{ scope.row.phone_number }}</span>
           </template>
         </el-table-column>
         
         <el-table-column prop="category" label="号码类别" align="center">
           <template #default="scope">
-            <el-tag :type="getCategoryTag(scope.row.category)" effect="light">
-              {{ scope.row.category }}
-            </el-tag>
+            <el-tag effect="light">{{ scope.row.category }}</el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="grade" label="等级" width="80" align="center">
+          <template #default="scope">
+            <el-tag type="warning" effect="dark" v-if="scope.row.grade > 0">Lv.{{ scope.row.grade }}</el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="归属区县" align="center" min-width="120">
+          <template #default="scope">
+            <el-tag v-if="scope.row.district_name" type="info">{{ scope.row.district_name }}</el-tag>
+            <span v-else class="text-gray">-</span>
           </template>
         </el-table-column>
         
         <el-table-column prop="status" label="当前状态" align="center">
           <template #default="scope">
-            <el-tag :type="scope.row.status === 'available' ? 'success' : 'info'" round>
-              {{ scope.row.status === 'available' ? '待抢注' : '已锁定' }}
+            <el-tag :type="getStatusType(scope.row.status)" round>
+              {{ getStatusText(scope.row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-
-        <el-table-column prop="importTime" label="导入时间" width="180" align="center" />
 
         <el-table-column label="操作" width="180" align="center">
           <template #default="scope">
@@ -71,8 +75,8 @@
               link 
               type="danger" 
               icon="Delete" 
-              :disabled="scope.row.status !== 'available'"
               @click="handleDelete(scope.row)"
+              :disabled="scope.row.status !== 0"
             >
               删除
             </el-button>
@@ -84,8 +88,9 @@
         <el-pagination
           layout="total, prev, pager, next"
           :total="total"
-          :page-size="10"
-          @current-change="fetchData"
+          :page-size="pageSize"
+          :current-page="currentPage"
+          @current-change="handlePageChange"
         />
       </div>
     </el-card>
@@ -93,29 +98,34 @@
     <el-dialog 
       v-model="dialogVisible" 
       :title="dialogType === 'add' ? '新增号码' : '编辑号码'"
-      width="400px"
+      width="450px"
     >
-      <el-form :model="formData" label-width="80px">
+      <el-form :model="formData" label-width="100px">
         <el-form-item label="手机号码">
-          <el-input v-model="formData.number" placeholder="请输入号码" />
+          <el-input v-model="formData.phone_number" placeholder="请输入11位手机号" />
         </el-form-item>
         <el-form-item label="号码类别">
-          <el-select v-model="formData.category" placeholder="请选择" style="width: 100%">
-            <el-option label="特等号" value="特等号" />
-            <el-option label="一等号" value="一等号" />
-            <el-option label="普通号" value="普通号" />
-          </el-select>
+          <el-input v-model="formData.category" placeholder="例如: 8号码, AAA号码" />
         </el-form-item>
-        <el-form-item label="初始状态" v-if="dialogType === 'add'">
-          <el-radio-group v-model="formData.status">
-            <el-radio label="available">待抢注</el-radio>
-            <el-radio label="locked">锁定中</el-radio>
-          </el-radio-group>
+        <el-form-item label="号码等级">
+           <el-input-number v-model="formData.grade" :min="0" :max="9" />
+        </el-form-item>
+        
+        <el-form-item label="派发区县" v-if="dialogType === 'edit' && currentStatus === 1">
+          <el-select v-model="formData.district_id" placeholder="修改归属区县" style="width: 100%">
+            <el-option 
+              v-for="item in districtList" 
+              :key="item.id" 
+              :label="item.name" 
+              :value="item.id" 
+            />
+          </el-select>
+          <div class="tips">⚠️ 修改此处会将订单转派给对应区县</div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确定保存</el-button>
+        <el-button type="primary" @click="submitForm" :loading="submitLoading">确定保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -124,144 +134,224 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, Download, Search, Edit, Delete } from '@element-plus/icons-vue'
+import { Plus, Upload, Download, Search, Edit, Delete, Refresh } from '@element-plus/icons-vue'
+import request from '@/utils/request'
+import * as XLSX from 'xlsx'
 
-// --- 类型定义 ---
-interface NumberItem {
+interface PhoneItem {
   id: number
-  number: string
+  phone_number: string
   category: string
-  status: 'available' | 'locked'
-  importTime: string
+  grade: number
+  status: number
+  district_name?: string
+  district_id?: number
 }
 
-// --- 状态变量 ---
 const loading = ref(false)
-const tableData = ref<NumberItem[]>([])
+const uploadLoading = ref(false)
+const submitLoading = ref(false)
+const tableData = ref<PhoneItem[]>([])
 const total = ref(0)
-const searchQuery = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
+const searchCategory = ref('')
 const dialogVisible = ref(false)
 const dialogType = ref<'add' | 'edit'>('add')
+const currentStatus = ref(0) // 记录当前编辑行的状态
+const districtList = ref<any[]>([]) // 区县字典
 
-// 表单数据
 const formData = reactive({
   id: 0,
-  number: '',
+  phone_number: '',
   category: '',
-  status: 'available'
+  grade: 0,
+  district_id: 0
 })
 
-// --- 模拟数据加载 ---
-const fetchData = (page = 1) => {
+const fetchData = async () => {
   loading.value = true
-  setTimeout(() => {
-    // 这里模拟从后端获取数据
-    tableData.value = [
-      { id: 1, number: '18888888888', category: '特等号', status: 'available', importTime: '2023-10-20' },
-      { id: 2, number: '13666666666', category: '一等号', status: 'locked', importTime: '2023-10-21' },
-      { id: 3, number: '13912345678', category: '普通号', status: 'available', importTime: '2023-10-22' },
-      { id: 4, number: '15900001111', category: '普通号', status: 'available', importTime: '2023-10-22' },
-    ]
-    total.value = 100
+  try {
+    const res: any = await request.get('/phone/list', {
+      params: {
+        page: currentPage.value,
+        size: pageSize.value,
+        category: searchCategory.value || undefined
+      }
+    })
+    tableData.value = res.list || []
+    total.value = res.total || 0
+  } catch (error) {
+    console.error(error)
+  } finally {
     loading.value = false
-  }, 400)
-}
-
-// --- 交互逻辑 ---
-const handleSearch = () => {
-  ElMessage.info(`正在搜索: ${searchQuery.value}`)
-  fetchData()
-}
-
-const getCategoryTag = (cat: string) => {
-  switch (cat) {
-    case '特等号': return 'danger'
-    case '一等号': return 'warning'
-    default: return ''
   }
 }
 
-// 打开弹窗
-const openDialog = (type: 'add' | 'edit', row?: NumberItem) => {
+// 获取区县列表
+const fetchDistricts = async () => {
+  try {
+    const res: any = await request.get('/district/list')
+    districtList.value = res.list || []
+  } catch (e) {
+    console.error(e)
+  }
+}
+
+const getStatusType = (status: number) => {
+  switch (status) {
+    case 0: return 'success'
+    case 1: return 'warning'
+    case 2: return 'info'
+    default: return 'danger'
+  }
+}
+
+const getStatusText = (status: number) => {
+  switch (status) {
+    case 0: return '待抢注'
+    case 1: return '锁定中'
+    case 2: return '已办理'
+    case 3: return '已拒绝'
+    default: return '未知'
+  }
+}
+
+const handleSearch = () => {
+  currentPage.value = 1
+  fetchData()
+}
+
+const handlePageChange = (val: number) => {
+  currentPage.value = val
+  fetchData()
+}
+
+const openDialog = (type: 'add' | 'edit', row?: PhoneItem) => {
   dialogType.value = type
   if (type === 'edit' && row) {
     formData.id = row.id
-    formData.number = row.number
+    formData.phone_number = row.phone_number
     formData.category = row.category
-    formData.status = row.status
+    formData.grade = row.grade
+    formData.district_id = row.district_id || 0
+    currentStatus.value = row.status
   } else {
-    // 重置表单
     formData.id = 0
-    formData.number = ''
-    formData.category = '普通号'
-    formData.status = 'available'
+    formData.phone_number = ''
+    formData.category = ''
+    formData.grade = 0
+    formData.district_id = 0
+    currentStatus.value = 0
   }
   dialogVisible.value = true
 }
 
-// 提交表单
-const submitForm = () => {
-  if (!formData.number) return ElMessage.warning('请输入号码')
+const submitForm = async () => {
+  if (!formData.phone_number) return ElMessage.warning('请输入号码')
   
-  loading.value = true
-  setTimeout(() => {
+  submitLoading.value = true
+  try {
     if (dialogType.value === 'add') {
-      tableData.value.unshift({
-        id: Date.now(),
-        number: formData.number,
-        category: formData.category,
-        status: formData.status as any,
-        importTime: new Date().toISOString().split('T')[0]
-      })
+      const payload = { list: [{ phone_number: formData.phone_number, category: formData.category, grade: formData.grade }] }
+      await request.post('/phone/import', payload)
       ElMessage.success('录入成功')
     } else {
-      // 更新逻辑
-      const index = tableData.value.findIndex(item => item.id === formData.id)
-      if (index !== -1) {
-        tableData.value[index] = { ...tableData.value[index], ...formData }
-      }
+      await request.post('/phone/update', {
+        id: formData.id,
+        phone_number: formData.phone_number,
+        category: formData.category,
+        grade: formData.grade,
+        district_id: formData.district_id // 传区县ID
+      })
       ElMessage.success('修改成功')
     }
     dialogVisible.value = false
-    loading.value = false
-  }, 300)
+    fetchData()
+  } catch (e) {
+    // handled
+  } finally {
+    submitLoading.value = false
+  }
 }
 
-// 删除号码
-const handleDelete = (row: NumberItem) => {
-  ElMessageBox.confirm('确认删除该号码？删除后无法恢复。', '警告', { type: 'warning' })
-    .then(() => {
-      tableData.value = tableData.value.filter(item => item.id !== row.id)
+const handleDelete = (row: PhoneItem) => {
+  ElMessageBox.confirm(`确认删除号码 ${row.phone_number}?`, '警告', { type: 'warning' })
+    .then(async () => {
+      await request.post('/phone/delete', { id: row.id })
       ElMessage.success('删除成功')
+      fetchData()
     })
 }
 
-// 模拟 Excel 导入
 const handleFileChange = (file: any) => {
-  // 这里可以引入 xlsx 库解析文件
-  // import * as XLSX from 'xlsx'
+  const rawFile = file.raw
+  if (!rawFile) return
+
+  uploadLoading.value = true
   
-  const loadingInstance = ElMessage.loading({
-    message: `正在解析文件: ${file.name}...`,
-    duration: 0
-  })
+  const reader = new FileReader()
+  reader.onload = async (e) => {
+    try {
+      const data = e.target?.result
+      const workbook = XLSX.read(data, { type: 'binary' })
+      
+      const firstSheetName = workbook.SheetNames[0]
+      if (!firstSheetName) {
+        ElMessage.warning('Excel 文件没有工作表')
+        return
+      }
 
-  // 模拟解析耗时
-  setTimeout(() => {
-    loadingInstance.close()
-    ElMessage.success(`成功导入 50 条号码数据！`)
-    fetchData() // 刷新列表
-  }, 1500)
+      const worksheet = workbook.Sheets[firstSheetName]
+      
+      // ✅ 新增：检查 worksheet 是否存在，消除 TS 报错
+      if (!worksheet) {
+        ElMessage.warning('无法读取工作表内容')
+        return
+      }
+
+      // 现在 TypeScript 知道 worksheet 绝对不是 undefined 了
+      const results: any[] = XLSX.utils.sheet_to_json(worksheet)
+      
+      const importList = results.map((item: any) => ({
+        phone_number: String(item['手机号'] || item['phone_number'] || ''),
+        category: item['类别'] || item['category'] || '普通号',
+        grade: Number(item['等级'] || item['grade'] || 0)
+      })).filter(item => item.phone_number)
+
+      if (importList.length === 0) {
+        ElMessage.warning('未解析到有效数据，请检查 Excel 表头')
+        return
+      }
+
+      const res: any = await request.post('/phone/import', { list: importList })
+      ElMessage.success(`成功导入 ${res.success_count} 条数据`)
+      fetchData()
+
+    } catch (error) {
+      console.error(error)
+      ElMessage.error('解析或导入失败')
+    } finally {
+      uploadLoading.value = false
+    }
+  }
+  reader.readAsBinaryString(rawFile)
 }
+// 找到 downloadTemplate 函数，替换为：
 
-// 下载模板
 const downloadTemplate = () => {
-  ElMessage.info('开始下载 Excel 模板...')
-  // window.location.href = '/template.xlsx'
+  // 生成模板数据
+  const header = [['手机号', '类别', '等级'], ['13800138000', 'AAA号码', 3]]
+  const ws = XLSX.utils.aoa_to_sheet(header)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '导入模板')
+  // 下载文件
+  XLSX.writeFile(wb, '号码导入模板.xlsx')
 }
 
 onMounted(() => {
   fetchData()
+  fetchDistricts() // 加载区县字典
 })
 </script>
 
@@ -270,7 +360,8 @@ onMounted(() => {
 .action-card { margin-bottom: 20px; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; }
 .left-panel { display: flex; gap: 10px; align-items: center; }
-.upload-btn { display: inline-flex; margin: 0 10px; }
-.number-font { font-family: Consolas, Monaco, monospace; font-size: 16px; font-weight: bold; }
+.number-font { font-family: Consolas, monospace; font-size: 16px; font-weight: bold; color: #409EFF; }
 .pagination-container { margin-top: 20px; display: flex; justify-content: flex-end; }
+.text-gray { color: #909399; }
+.tips { font-size: 12px; color: #E6A23C; margin-top: 5px; }
 </style>

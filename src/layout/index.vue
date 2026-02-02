@@ -120,6 +120,24 @@ const handleCommand = (command: string) => {
     ElMessage.info('个人中心功能开发中...')
   }
 }
+
+
+
+
+
+// ✅ 获取当前角色
+const currentRole = localStorage.getItem('role') || ''
+
+// ✅ 权限检查函数
+const checkPermission = (allowedRoles: string[]) => {
+  // 如果是 admin，拥有所有权限
+  if (currentRole === 'admin') return true
+  // 检查当前角色是否在允许列表中
+  return allowedRoles.includes(currentRole)
+}
+
+
+
 </script>
 
 <style scoped>

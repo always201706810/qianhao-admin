@@ -12,7 +12,7 @@
       <el-form 
         ref="loginFormRef"
         :model="loginForm"
-        :rules="loginRules"
+        :rules="rules"
         class="login-form"
         size="large"
       >
@@ -35,24 +35,28 @@
           />
         </el-form-item>
 
-        <el-form-item prop="captcha">
+        <el-form-item prop="code">
           <div class="captcha-row">
             <el-input 
-              v-model="loginForm.captcha" 
+              v-model="loginForm.code" 
               placeholder="验证码" 
-              :prefix-icon="Key" 
-              style="flex: 1"
+              :prefix-icon="Key"
+              @keyup.enter="handleLogin"
             />
-            <div class="captcha-img" @click="refreshCaptcha" title="点击刷新">
-              {{ captchaCode }}
-            </div>
+            <img 
+              v-if="captchaUrl"
+              :src="captchaUrl" 
+              class="captcha-img" 
+              @click="getCaptcha" 
+              alt="验证码"
+              title="点击刷新"
+            />
           </div>
         </el-form-item>
 
-        <div class="form-options">
-          <el-checkbox v-model="rememberMe">记住账号</el-checkbox>
-          <el-link type="primary" :underline="false">忘记密码？</el-link>
-        </div>
+        <el-form-item>
+            <el-checkbox v-model="loginForm.rememberMe" style="color: #666;">记住账号</el-checkbox>
+        </el-form-item>
 
         <el-button 
           type="primary" 
@@ -62,101 +66,126 @@
         >
           {{ loading ? '登 录 中...' : '立 即 登 录' }}
         </el-button>
-        
-        <div class="tips">
-          <span>测试账号：admin / district / importer</span>
-          <span>密码：任意</span>
-        </div>
+
       </el-form>
     </div>
     
     <div class="footer">
-      Copyright © 2023 抢号管理系统 All Rights Reserved.
+      Copyright © 2026 抢号管理系统 All Rights Reserved.
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Key, Monitor } from '@element-plus/icons-vue'
+import request from '@/utils/request'
 
 const router = useRouter()
 const loginFormRef = ref()
 const loading = ref(false)
-const rememberMe = ref(false)
-const captchaCode = ref('8888') // 模拟验证码
 
+// 登录表单数据
 const loginForm = reactive({
-  username: 'admin', // 默认填好方便你测试
+  username: '',
   password: '',
-  captcha: ''
+  code: '',      
+  captchaId: '',  
+  rememberMe: false 
 })
 
-// 表单校验规则
-const loginRules = {
-  username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+const captchaUrl = ref('')
+
+const rules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-  captcha: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
+  code: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
 }
 
-// 刷新验证码（模拟）
-const refreshCaptcha = () => {
-  const codes = ['1234', 'ABCD', '8888', '5678']
-  captchaCode.value = codes[Math.floor(Math.random() * codes.length)]
-  loginForm.captcha = '' // 清空输入框
+// 1. 获取验证码
+const getCaptcha = async () => {
+  try {
+    const res: any = await request.get('/base/captcha')
+    if (res) {
+        captchaUrl.value = res.base64
+        loginForm.captchaId = res.captcha_id
+    }
+  } catch (error) {
+    console.error('获取验证码失败', error)
+  }
 }
 
-// 登录逻辑
+// 2. 登录处理 (这里是关键修改点)
 const handleLogin = async () => {
   if (!loginFormRef.value) return
   
-  await loginFormRef.value.validate((valid: boolean) => {
+  await loginFormRef.value.validate(async (valid: boolean) => {
     if (valid) {
-      // 校验验证码
-      if (loginForm.captcha.toUpperCase() !== captchaCode.value) {
-        ElMessage.error('验证码错误')
-        refreshCaptcha()
-        return
-      }
-
       loading.value = true
-      
-      // 模拟后端请求延迟
-      setTimeout(() => {
-        loading.value = false
+      try {
+        // 请求路径改为 /base/login 以匹配后端
+        const res: any = await request.post('/user/login', {
+          username: loginForm.username,
+          password: loginForm.password,
+          captcha: loginForm.code,       
+          captcha_id: loginForm.captchaId 
+        })
         
-        // 简单的角色判断逻辑 (实际开发中由后端返回 token 和 userInfo)
-        const roleMap: any = {
-          'admin': '超级管理员',
-          'district': '区县管理员',
-          'importer': '导入管理员'
-        }
+        ElMessage.success('登录成功')
 
-        if (roleMap[loginForm.username]) {
-          ElMessage.success(`欢迎回来，${roleMap[loginForm.username]}`)
-          
-          // 这里将用户信息存入 localStorage，以便 Layout 页面读取
-          localStorage.setItem('userRole', loginForm.username)
-          localStorage.setItem('userName', roleMap[loginForm.username])
-          
-          // 跳转到首页
-          router.push('/')
+        // ✅ 1. 存储核心数据
+        localStorage.setItem('token', res.token)
+        localStorage.setItem('role', res.role) // 存储后端返回的角色
+        
+        // ✅ 2. 存储用户详情 (可选，用于右上角显示昵称等)
+        localStorage.setItem('user_info', JSON.stringify({
+            username: res.username,
+            nick_name: res.nick_name,
+            district_id: res.district_id
+        }))
+
+        // ✅ 3. 记住账号逻辑 (保持原样)
+        if (loginForm.rememberMe) {
+          localStorage.setItem('saved_username', loginForm.username)
+          localStorage.setItem('is_remember', 'true')
         } else {
-          ElMessage.error('账号不存在 (测试账号: admin, district, importer)')
+          localStorage.removeItem('saved_username')
+          localStorage.removeItem('is_remember')
         }
-      }, 1000)
+        
+        router.push('/')
+        
+      } catch (error: any) {
+        getCaptcha()
+        loginForm.password = ''
+        loginForm.code = ''
+      } finally {
+        loading.value = false
+      }
     }
   })
 }
+
+onMounted(() => {
+  getCaptcha()
+  const savedUsername = localStorage.getItem('saved_username')
+  const isRemember = localStorage.getItem('is_remember')
+  
+  if (savedUsername && isRemember === 'true') {
+    loginForm.username = savedUsername
+    loginForm.rememberMe = true
+  }
+})
 </script>
 
 <style scoped>
+/* 保持你原有的样式完全不变 */
 .login-container {
   height: 100vh;
   width: 100%;
-  background-color: #2d3a4b; /* 深色背景 */
+  background-color: #2d3a4b; 
   background-image: linear-gradient(135deg, #2d3a4b 0%, #1f2a38 100%);
   display: flex;
   justify-content: center;
@@ -210,28 +239,13 @@ const handleLogin = async () => {
 }
 
 .captcha-img {
-  width: 100px;
+  width: 120px; 
   height: 40px;
   background: #f2f6fc;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   cursor: pointer;
-  font-weight: bold;
-  letter-spacing: 5px;
-  font-style: italic;
-  color: #409EFF;
-  font-size: 18px;
-  user-select: none;
-}
-
-.form-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 25px;
+  object-fit: contain; /* 让图片自适应 */
 }
 
 .login-btn {
@@ -239,16 +253,6 @@ const handleLogin = async () => {
   font-size: 16px;
   letter-spacing: 2px;
   padding: 20px 0;
-}
-
-.tips {
-  margin-top: 20px;
-  font-size: 12px;
-  color: #c0c4cc;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
 }
 
 .footer {
