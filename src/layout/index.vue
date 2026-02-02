@@ -20,19 +20,30 @@
             <el-icon><Phone /></el-icon>
             <span>号码办理</span>
           </template>
-          <el-menu-item index="/number/pending">待沟通</el-menu-item>
-          <el-menu-item index="/number/completed">已沟通</el-menu-item>
-          <el-menu-item index="/number/process">数据处理</el-menu-item>
+          
+          <el-menu-item 
+            index="/number/pending"
+            v-if="checkPermission(['admin', 'district_admin'])"
+          >待沟通</el-menu-item>
+          
+          <el-menu-item 
+            index="/number/completed"
+            v-if="checkPermission(['admin', 'district_admin'])"
+          >已沟通</el-menu-item>
+          
+          <el-menu-item 
+            index="/number/process"
+            v-if="checkPermission(['admin', 'import_admin'])"
+          >数据处理</el-menu-item>
+          
           <el-menu-item index="/number/analysis">数据分析</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu index="2">
+        <el-sub-menu index="2" v-if="checkPermission(['admin'])">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>基础信息管理</span>
           </template>
-          <el-menu-item index="/system/logs">用户日志</el-menu-item>
-          <el-menu-item index="/system/permissions">用户与权限</el-menu-item>
           <el-menu-item index="/system/users">用户信息</el-menu-item>
         </el-sub-menu>
       </el-menu>
@@ -98,8 +109,31 @@ const activeMenu = computed(() => route.path)
 // 获取当前页面标题（用于面包屑）
 const currentTitle = computed(() => route.meta.title || '控制台')
 
-// 获取登录用户名（从 Login 页存的 localStorage 取）
-const username = ref(localStorage.getItem('userName') || '管理员')
+// --- 获取用户信息逻辑优化 ---
+// 尝试从 user_info JSON 中解析昵称，如果失败则取 role，再失败显示默认值
+const getUserName = () => {
+  const infoStr = localStorage.getItem('user_info')
+  if (infoStr) {
+    try {
+      const info = JSON.parse(infoStr)
+      return info.nick_name || info.username // 优先显示昵称
+    } catch (e) {
+      return localStorage.getItem('role') || '管理员'
+    }
+  }
+  return localStorage.getItem('role') || '管理员'
+}
+const username = ref(getUserName())
+
+// --- 权限控制核心逻辑 ---
+const currentRole = localStorage.getItem('role') || ''
+
+const checkPermission = (allowedRoles: string[]) => {
+  // 1. 如果是 admin，无条件拥有所有权限
+  if (currentRole === 'admin') return true
+  // 2. 否则检查当前角色是否在允许名单里
+  return allowedRoles.includes(currentRole)
+}
 
 // 处理下拉菜单点击
 const handleCommand = (command: string) => {
@@ -109,7 +143,7 @@ const handleCommand = (command: string) => {
       cancelButtonText: '取消',
       type: 'warning'
     }).then(() => {
-      // 1. 清除缓存
+      // 1. 清除所有缓存
       localStorage.clear()
       // 2. 提示
       ElMessage.success('已安全退出')
@@ -117,27 +151,9 @@ const handleCommand = (command: string) => {
       router.push('/login')
     })
   } else if (command === 'profile') {
-    ElMessage.info('个人中心功能开发中...')
+    ElMessage.info(`当前角色: ${currentRole}`)
   }
 }
-
-
-
-
-
-// ✅ 获取当前角色
-const currentRole = localStorage.getItem('role') || ''
-
-// ✅ 权限检查函数
-const checkPermission = (allowedRoles: string[]) => {
-  // 如果是 admin，拥有所有权限
-  if (currentRole === 'admin') return true
-  // 检查当前角色是否在允许列表中
-  return allowedRoles.includes(currentRole)
-}
-
-
-
 </script>
 
 <style scoped>
@@ -218,7 +234,7 @@ const checkPermission = (allowedRoles: string[]) => {
 
 /* --- 主内容区样式 --- */
 .app-main {
-  background-color: #f0f2f5; /* 浅灰底色，让卡片更突出 */
+  background-color: #f0f2f5; 
   padding: 20px;
   overflow-y: auto;
 }
