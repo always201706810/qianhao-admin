@@ -93,43 +93,45 @@ const initData = async () => {
 // 渲染 ECharts
 const renderChart = (data: any[]) => {
   if (!chartRef.value) return
-  
-  // 如果图表实例不存在，初始化它
+  // 按照区县名称的中文拼音顺序排序，确保 X 轴位置永远固定
+  const sortedData = [...data].sort((a, b) => {
+    return a.district_name.localeCompare(b.district_name, 'zh-CN')
+  })
+
   if (!myChart) {
     myChart = echarts.init(chartRef.value)
   }
 
-  // 提取数据
-  const districts = data.map(item => item.district_name)
-  const pendingData = data.map(item => item.pending_count)
-  const soldData = data.map(item => item.sold_count)
-
-const option = {
+  // // 提取数据
+  // const districts = data.map(item => item.district_name)
+  // const pendingData = data.map(item => item.pending_count)
+  // const soldData = data.map(item => item.sold_count)
+  // // 获取已拒绝数据
+  // const rejectedData = data.map(item => item.rejected_count || 0)
+  const districts = sortedData.map(item => item.district_name)
+  const pendingData = sortedData.map(item => item.pending_count)
+  const soldData = sortedData.map(item => item.sold_count)
+  const rejectedData = sortedData.map(item => item.rejected_count || 0)
+  const option = {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' }
     },
     legend: {
-      data: ['待办理', '已办理'],
-      // 👇 修改这里：把图例放到顶部居中
-      top: 'top', 
+      // 增加 '已拒绝'
+      data: ['待办理', '已办理', '已拒绝'],
+      top: 'top',
       left: 'center'
     },
     grid: {
       left: '3%',
       right: '4%',
-      // 👇 修改这里：稍微增加一点底部边距，让X轴标签舒展点
-      bottom: '5%', 
+      bottom: '5%',
       containLabel: true
     },
     xAxis: {
       type: 'category',
-      data: districts,
-      // 👇 新增建议：如果区县多了标签挤，可以加上这个让标签倾斜
-      // axisLabel: {
-      //   interval: 0,
-      //   rotate: 30
-      // }
+      data: districts
     },
     yAxis: {
       type: 'value'
@@ -138,11 +140,11 @@ const option = {
       {
         name: '待办理',
         type: 'bar',
-        stack: 'total', // 堆叠显示，如果你想并排显示就去掉这行
+        stack: 'total',
         label: { show: true },
         emphasis: { focus: 'series' },
         data: pendingData,
-        itemStyle: { color: '#E6A23C' }
+        itemStyle: { color: '#E6A23C' } // 黄色
       },
       {
         name: '已办理',
@@ -151,7 +153,17 @@ const option = {
         label: { show: true },
         emphasis: { focus: 'series' },
         data: soldData,
-        itemStyle: { color: '#67C23A' }
+        itemStyle: { color: '#67C23A' } // 绿色
+      },
+      //  新增：已拒绝系列
+      {
+        name: '已拒绝',
+        type: 'bar',
+        stack: 'total',
+        label: { show: true },
+        emphasis: { focus: 'series' },
+        data: rejectedData,
+        itemStyle: { color: '#F56C6C' } // 红色
       }
     ]
   }
@@ -159,7 +171,6 @@ const option = {
   myChart.setOption(option)
 }
 
-// 监听窗口大小变化，图表自适应
 const handleResize = () => {
   myChart?.resize()
 }
@@ -180,7 +191,6 @@ onBeforeUnmount(() => {
 .header-tools { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .page-title { font-size: 20px; font-weight: bold; color: #303133; }
 
-/* 卡片样式 */
 .data-card {
   position: relative;
   height: 120px;

@@ -36,7 +36,7 @@
             v-if="checkPermission(['admin', 'import_admin'])"
           >数据处理</el-menu-item>
           
-          <el-menu-item index="/number/analysis">数据分析</el-menu-item>
+          <el-menu-item index="/number/analysis" v-if="checkPermission(['admin', 'import_admin'])">数据分析</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="2" v-if="checkPermission(['admin'])">
@@ -45,6 +45,7 @@
             <span>基础信息管理</span>
           </template>
           <el-menu-item index="/system/users">用户信息</el-menu-item>
+          <el-menu-item index="/system/logs">用户日志</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>

@@ -158,13 +158,44 @@ const submitForm = async () => {
   }
 }
 
+// const handleDelete = (row: any) => {
+//   ElMessageBox.confirm(`确认删除用户 ${row.username}?`, '提示', { type: 'warning' }).then(async () => {
+//     // 需要后端补充 DeleteUser 接口，如果没写，暂时只是前端演示
+//     // await request.post('/system/user/delete', { id: row.id })
+//     // ElMessage.success('删除成功')
+//     // fetchData()
+//     ElMessage.warning('后端需补充 Delete 接口')
+//   })
+// }
+
 const handleDelete = (row: any) => {
-  ElMessageBox.confirm(`确认删除用户 ${row.username}?`, '提示', { type: 'warning' }).then(async () => {
-    // 需要后端补充 DeleteUser 接口，如果没写，暂时只是前端演示
-    // await request.post('/system/user/delete', { id: row.id })
-    // ElMessage.success('删除成功')
-    // fetchData()
-    ElMessage.warning('后端需补充 Delete 接口')
+  // 1. 二次确认，防止手抖
+  ElMessageBox.confirm(
+    `此操作将永久删除用户 [${row.username}]，是否继续？`,
+    '高风险操作提示',
+    {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'error', // 红色错误图标
+    }
+  ).then(async () => {
+    loading.value = true
+    try {
+      // ✅ 对应你后端的路由: post /api/v1/system/user/delete
+      // 假设你的 request 已经配置了 baseURL: /api/v1
+      await request.post('/system/user/delete', { 
+        id: row.id 
+      })
+
+      ElMessage.success('用户删除成功')
+      fetchData() // 重新拉取列表，同步状态
+    } catch (e) {
+      // 错误会被拦截器自动处理，显示后端返回的 msg
+    } finally {
+      loading.value = false
+    }
+  }).catch(() => {
+    // 点击取消则不做任何操作
   })
 }
 
