@@ -80,7 +80,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="预存/价格" width="120" align="center">
+        <el-table-column label="保底金额" width="120" align="center">
            <template #default="scope">
              <span v-if="scope.row.price > 0" style="color: #f56c6c; font-weight: bold;">
                ¥ {{ scope.row.price }}
